@@ -28,8 +28,10 @@
     "import matplotlib.pyplot as plt\n",
     "import gc # for memory cleaning\n",
     "\n",
+    "from sklearn import preprocessing, model_selection, linear_model, metrics\n",
     "from sklearn.model_selection import StratifiedKFold\n",
     "from sklearn.model_selection import train_test_split\n",
+    "from sklearn.model_selection import GridSearchCV\n",
     "from sklearn.pipeline import make_pipeline\n",
     "from sklearn.preprocessing import StandardScaler\n",
     "from sklearn.linear_model import LogisticRegression\n",
@@ -132,6 +134,34 @@
     "            featureset[:, freq, time] = stats.zscore(np.median(np.squeeze(np.median(temp,0)),0))\n",
     "     \n",
     "    return featureset\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# tunes regression models using validation proportion of training set\n",
+    "# returns \n",
+    "\n",
+    "def TuningModels(models, X, Y, val_size, iterations = 100):\n",
+    "    import numpy as np\n",
+    "    from sklearn.model_selection import train_test_split\n",
+    "    results = {}\n",
+    "    for i in models:\n",
+    "        metric_train = []\n",
+    "        metric_val = []\n",
+    "        for j in range(iterations):\n",
+    "            X_train, X_val, y_train, y_val = train_test_split(X,Y,test_size = val_size)\n",
+    "            metric_val.append(metrics.mean_squared_error(y_val,\n",
+    "                                                     models[i].fit(X_train,\n",
+    "                                                                   y_train).predict(X_val)))\n",
+    "            metric_train.append(metrics.mean_squared_error(y_train,\n",
+    "                                                       models[i].fit(X_train, \n",
+    "                                                                     y_train).predict(X_train)))\n",
+    "        results[i] = [np.mean(metric_train), np.mean(metric_val)]\n",
+    "    return results\n"
    ]
   },
   {
@@ -303,7 +333,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": 18,
+   "execution_count": 28,
    "metadata": {},
    "outputs": [
     {
@@ -313,8 +343,9 @@
       "time indices are:\n",
       "[  0  10  20  30  40  50  60  70  80  90 100 110 120 130 140 150 160 170\n",
       " 180 190 200 210 220 230 240 250]\n",
+      "\n",
       "frequency indices are:\n",
-      "<class 'numpy.ndarray'>\n"
+      "[  0   4  12  22  36  66 106 155 235]\n"
      ]
     }
    ],
@@ -398,9 +429,9 @@
     "    MEG_chanBins = FeatureBins(MEG_chan, timeIndx, freqIndx, nEvents)      \n",
     "    MEG_Power[:,chan,:,:] = MEG_chanBins  # [electrode x trial x wavelet x time]\n",
     "    \n",
-    "    #del MEG_chan\n",
-    "    #del MEG_chanBins\n",
-    "    #gc.collect()     \n",
+    "    del MEG_chan\n",
+    "    del MEG_chanBins\n",
+    "    gc.collect()     \n",
     "    \n",
     "    print(chan)"
    ]
@@ -430,20 +461,21 @@
    ],
    "source": [
     "# load data features\n",
-    "this_featureset = np.load('Pt1Featureset.npy')\n",
-    "this_featureset.shape"
+    "featureset = np.load('Pt1Featureset.npy')\n",
+    "featureset.shape"
    ]
   },
   {
    "cell_type": "code",
-   "execution_count": 21,
+   "execution_count": 30,
    "metadata": {},
    "outputs": [
     {
      "name": "stdout",
      "output_type": "stream",
      "text": [
-      "(920,)\n"
+      "(920,)\n",
+      "{0, 1}\n"
      ]
     }
    ],
@@ -451,9 +483,9 @@
     "# create labels\n",
     "y_sup = (epochs.events[:, 2] > 48).astype(int) # set up superordinate classification label\n",
     "print(y_sup.shape)\n",
-    "#print(y_sup)\n",
+    "\n",
     "classes = set(y_sup) \n",
-    "#print(classes)"
+    "print(classes)"
    ]
   },
   {
@@ -463,7 +495,7 @@
    "outputs": [],
    "source": [
     "# train-test split\n",
-    "Feats_train, Feats_test, OV_train, OV_test = train_test_split(this_featureset, y_sup, test_size=0.3, random_state=47)"
+    "feats_train, feats_test, OV_train, OV_test = train_test_split(featureset, y_sup, test_size=0.3, random_state=47)"
    ]
   },
   {
@@ -472,8 +504,8 @@
    "metadata": {},
    "outputs": [],
    "source": [
-    "np.save('Feats_train', Feats_train)\n",
-    "np.save('Feats_test', Feats_test)\n",
+    "np.save('Feats_train', feats_train)\n",
+    "np.save('Feats_test', feats_test)\n",
     "np.save('OV_train', OV_train)\n",
     "np.save('OV_test', OV_test)"
    ]
@@ -484,8 +516,8 @@
    "metadata": {},
    "outputs": [],
    "source": [
-    "Feats_train = np.load('Feats_train.npy')\n",
-    "Feats_test = np.load('Feats_test.npy')\n",
+    "feats_train = np.load('Feats_train.npy')\n",
+    "feats_test = np.load('Feats_test.npy')\n",
     "OV_train = np.load('OV_train.npy')\n",
     "OV_test = np.load('OV_test.npy')"
    ]
@@ -505,8 +537,8 @@
     }
    ],
    "source": [
-    "print(Feats_train.shape)\n",
-    "print(Feats_test.shape)"
+    "print(feats_train.shape)\n",
+    "print(feats_test.shape)"
    ]
   },
   {
@@ -515,8 +547,8 @@
    "metadata": {},
    "outputs": [],
    "source": [
-    "Feats_train = np.reshape(Feats_train, (644, 61200))\n",
-    "Feats_test = np.reshape(Feats_test, (276, 61200))"
+    "feats_train = np.reshape(feats_train, (644, 61200))\n",
+    "feats_test = np.reshape(feats_test, (276, 61200))"
    ]
   },
   {
@@ -534,8 +566,8 @@
     }
    ],
    "source": [
-    "print(Feats_train.shape)\n",
-    "print(Feats_test.shape)"
+    "print(feats_train.shape)\n",
+    "print(feats_test.shape)"
    ]
   },
   {
@@ -545,7 +577,7 @@
    "outputs": [],
    "source": [
     "# assess correlation between features to check for multicollinearity\n",
-    "# PVsCorrMat = np.corrcoef(Feats_train, rowvar = False)\n",
+    "# PVsCorrMat = np.corrcoef(feats_train, rowvar = False)\n",
     "# PVsCoDMat = np.power(PVsCorrMat, 2)"
    ]
   },
@@ -582,30 +614,7 @@
     }
    ],
    "source": [
-    "# fit lasso, ridge, and the ElasticNet models using a tuning approach over \n",
-    "# hyperparameter alpha (lambda)\n",
-    "\n",
-    "from sklearn.model_selection import GridSearchCV\n",
-    "from sklearn import preprocessing, model_selection, linear_model, metrics\n",
-    "\n",
-    "# tune reg models using validate proportion of train set\n",
-    "def TuningModels(models, X, Y, val_size, iterations = 100):\n",
-    "    import numpy as np\n",
-    "    from sklearn.model_selection import train_test_split\n",
-    "    results = {}\n",
-    "    for i in models:\n",
-    "        metric_train = []\n",
-    "        metric_val = []\n",
-    "        for j in range(iterations):\n",
-    "            X_train, X_val, y_train, y_val = train_test_split(X,Y,test_size = val_size)\n",
-    "            metric_val.append(metrics.mean_squared_error(y_val,\n",
-    "                                                     models[i].fit(X_train,\n",
-    "                                                                   y_train).predict(X_val)))\n",
-    "            metric_train.append(metrics.mean_squared_error(y_train,\n",
-    "                                                       models[i].fit(X_train, \n",
-    "                                                                     y_train).predict(X_train)))\n",
-    "        results[i] = [np.mean(metric_train), np.mean(metric_val)]\n",
-    "    return results\n",
+    "# fit lasso, ridge, & ElasticNet models using a tuning approach over hyperparameter α (λ)\n",
     "\n",
     "# alpha = penalty for deviance\n",
     "lasso_params = {'alpha':np.linspace(1e-5,1e-2,30)}\n",
